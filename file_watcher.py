@@ -6,6 +6,7 @@ File Watcher Utility - CLI tool to monitor files and directories for changes.
 import argparse
 import hashlib
 import json
+import logging
 import os
 import sys
 import time
@@ -17,8 +18,14 @@ try:
     from watchdog.observers import Observer
     from watchdog.events import FileSystemEventHandler, FileSystemEvent
 except ImportError:
-    print("Error: watchdog library not installed. Run: pip install watchdog")
+    logging.error("watchdog library not installed. Run: pip install watchdog")
     sys.exit(1)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 class FileState:
@@ -99,7 +106,7 @@ class ChangeHandler(FileSystemEventHandler):
             "path": path
         }
         self.changes.append(change)
-        print(f"[{timestamp}] {event_type}: {path}")
+        logger.info("[%s] %s: %s", timestamp, event_type, path)
 
     def on_created(self, event: FileSystemEvent):
         if event.is_directory:
@@ -174,44 +181,44 @@ def watch_directory(
     """Start watching a directory for changes."""
     abs_path = os.path.abspath(path)
     if not os.path.exists(abs_path):
-        print(f"Error: Path does not exist: {abs_path}")
+        logger.error("Path does not exist: %s", abs_path)
         sys.exit(1)
 
     handler = ChangeHandler(patterns=patterns, use_hash=use_hash)
 
     if use_hash:
-        print("Scanning initial file states...")
+        logger.info("Scanning initial file states...")
         handler.file_states = scan_directory(abs_path, patterns)
-        print(f"Tracking {len(handler.file_states)} files")
+        logger.info("Tracking %d files", len(handler.file_states))
 
     observer = Observer()
     observer.schedule(handler, abs_path, recursive=recursive)
     observer.start()
 
-    print(f"Watching: {abs_path}")
+    logger.info("Watching: %s", abs_path)
     if patterns:
-        print(f"Patterns: {', '.join(patterns)}")
-    print("Press Ctrl+C to stop...")
-    print("-" * 50)
+        logger.info("Patterns: %s", ', '.join(patterns))
+    logger.info("Press Ctrl+C to stop...")
+    logger.info("-" * 50)
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         observer.stop()
-        print("\nStopping watcher...")
+        logger.info("\nStopping watcher...")
 
     observer.join()
 
     if handler.changes:
-        print(f"\nTotal changes recorded: {len(handler.changes)}")
+        logger.info("\nTotal changes recorded: %d", len(handler.changes))
 
 
 def export_changes(changes: list, output_file: str):
     """Export recorded changes to a JSON file."""
     with open(output_file, 'w') as f:
         json.dump(changes, f, indent=2)
-    print(f"Changes exported to: {output_file}")
+    logger.info("Changes exported to: %s", output_file)
 
 
 def main():
@@ -263,7 +270,7 @@ def main():
             recursive=args.recursive
         )
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error("%s", e)
         sys.exit(1)
 
 
