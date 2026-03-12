@@ -12,7 +12,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 try:
     from watchdog.observers import Observer
@@ -81,7 +81,7 @@ class ChangeHandler(FileSystemEventHandler):
         self.patterns = patterns or set()
         self.use_hash = use_hash
         self.file_states: Dict[str, FileState] = {}
-        self.changes: list = []
+        self.changes: List[dict] = []
         self._lock = False
 
     def _matches_pattern(self, path: str) -> bool:
@@ -177,8 +177,12 @@ def watch_directory(
     patterns: Optional[Set[str]] = None,
     use_hash: bool = False,
     recursive: bool = True
-):
-    """Start watching a directory for changes."""
+) -> Tuple[ChangeHandler, List[dict]]:
+    """Start watching a directory for changes.
+    
+    Returns:
+        Tuple of (handler, changes list)
+    """
     abs_path = os.path.abspath(path)
     if not os.path.exists(abs_path):
         logger.error("Path does not exist: %s", abs_path)
@@ -213,8 +217,10 @@ def watch_directory(
     if handler.changes:
         logger.info("\nTotal changes recorded: %d", len(handler.changes))
 
+    return handler, handler.changes
 
-def export_changes(changes: list, output_file: str):
+
+def export_changes(changes: List[dict], output_file: str):
     """Export recorded changes to a JSON file."""
     with open(output_file, 'w') as f:
         json.dump(changes, f, indent=2)
@@ -263,12 +269,15 @@ def main():
     patterns = set(args.patterns) if args.patterns else None
 
     try:
-        watch_directory(
+        handler, changes = watch_directory(
             path=args.path,
             patterns=patterns,
             use_hash=args.hash,
             recursive=args.recursive
         )
+        
+        if args.output and changes:
+            export_changes(changes, args.output)
     except Exception as e:
         logger.error("%s", e)
         sys.exit(1)
